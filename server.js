@@ -8,6 +8,7 @@ const cors = require('cors');
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(express.static('public'));
 
 // ─── Data Layer — Reuse KhaanRate scrapers ──────────────────────
 const { fetchAll, buildOfficial, CURRENCIES } = require('../khaanrate/bank-rates');
