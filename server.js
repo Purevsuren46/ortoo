@@ -138,6 +138,42 @@ app.delete('/api/keys/:key', (req, res) => {
   ok ? res.json({ deleted: true }) : res.status(404).json({ error: 'Key not found' });
 });
 
+// ─── PUBLIC DATA (no auth needed — for landing page) ────────────
+
+app.get('/api/v1/public/rates', async (req, res) => {
+  try {
+    const { banks, official } = await getRates();
+    const flags = { usd: '🇺🇸', cny: '🇨🇳', eur: '🇪🇺', rub: '🇷🇺', jpy: '🇯🇵', krw: '🇰🇷', gbp: '🇬🇧' };
+    const names = { usd: 'Америк доллар', cny: 'Хятад юань', eur: 'Евро', rub: 'Орос рубль', jpy: 'Япон иен', krw: 'Солонгос вон', gbp: 'Англи фунт' };
+    const currencies = {};
+    for (const cur of CURRENCIES) {
+      if (!official?.[cur]) continue;
+      const sellers = banks.filter(b => b.rates[cur]?.sell).sort((a, b2) => a.rates[cur].sell - b2.rates[cur].sell);
+      const buyers = banks.filter(b => b.rates[cur]?.buy).sort((a, b2) => b2.rates[cur].buy - a.rates[cur].buy);
+      currencies[cur] = {
+        flag: flags[cur] || '💱', name: names[cur] || cur.toUpperCase(),
+        official: official[cur],
+        cheapest_sell: sellers[0] ? { bank: sellers[0].mn, rate: sellers[0].rates[cur].sell } : null,
+        best_buy: buyers[0] ? { bank: buyers[0].mn, rate: buyers[0].rates[cur].buy } : null,
+        banks_count: sellers.length
+      };
+    }
+    res.json({ updated: new Date(ratesCache.ts).toISOString(), currencies });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/v1/public/loans', async (req, res) => {
+  try {
+    const rates = await getLoans();
+    res.json({
+      mortgage: rates.mortgage?.map(r => ({ bank: r.mn || r.bank, min: r.rateMin || r.min, max: r.rateMax || r.max })),
+      personal: rates.personal?.map(r => ({ bank: r.mn || r.bank, min: r.rateMin || r.min, max: r.rateMax || r.max })),
+      business: rates.business?.map(r => ({ bank: r.mn || r.bank, min: r.rateMin || r.min, max: r.rateMax || r.max })),
+      car: rates.car?.map(r => ({ bank: r.mn || r.bank, min: r.rateMin || r.min, max: r.rateMax || r.max })),
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── PROTECTED ROUTES ────────────────────────────────────────────
 
 app.get('/api/v1/rates', authMiddleware, async (req, res) => {
