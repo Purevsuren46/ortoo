@@ -1,0 +1,10 @@
+🏗️ ӨРТӨӨ API running on :3401
+📖 Docs: http://localhost:3401/api/docs
+🔑 Test API key: ort_wch3lqw5CHEx0JDBflTF9aAbev3eDeEl
+🏦 Fetching bank rates...
+  ✅ GolomtBank
+  ✅ XacBank
+  ✅ StateBank
+  ✅ TDBM
+  ✅ TransBank
+📦 Using cached bank rates
