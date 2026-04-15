@@ -29,7 +29,7 @@ function req(method, path, body, key) {
 
     // 2. Health check
     console.log('\n🏥 Health check...');
-    const health = await req('GET', '/', null);
+    const health = await req('GET', '/api/health', null);
     console.log(`   ${health.data.name} v${health.data.version} — ${health.data.status}`);
 
     // 3. All rates
