@@ -80,6 +80,13 @@
     .plan .limit{color:var(--muted);font-size:.9rem;margin:.5rem 0 1rem}
     .plan ul{list-style:none;text-align:left}.plan ul li{padding:.3rem 0;font-size:.9rem}.plan ul li::before{content:'✓ ';color:var(--accent2)}
 
+    .conv-bank-row{display:flex;justify-content:space-between;padding:.5rem 0;border-bottom:1px solid var(--border);font-size:.9rem}
+    .conv-bank-row:last-child{border:none}
+    .conv-bank-row .bnk{color:var(--muted)}.conv-bank-row .rt{font-weight:700;font-variant-numeric:tabular-nums}
+    .conv-bank-row.cheapest .rt{color:var(--accent2)}
+    .conv-bank-row.cheapest .bnk::after{content:' 🏆';color:var(--accent2)}
+    #conv-savings{text-align:center;margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--border);color:var(--accent);font-weight:700}
+
     footer{text-align:center;padding:3rem 2rem;border-top:1px solid var(--border);color:var(--muted);font-size:.85rem}
     footer a{color:var(--muted);margin:0 .5rem}
 
@@ -95,6 +102,7 @@
   <div class="logo">🏗️ ӨРТӨӨ</div>
   <div class="links">
     <a href="#rates">Ханш</a>
+    <a href="#converter">Хөрвүүлэх</a>
     <a href="#loans">Зээл</a>
     <a href="#docs">API Docs</a>
     <a href="#pricing">Үнэ</a>
@@ -137,6 +145,30 @@
     <button class="loan-tab" data-type="car">🚗 Автомашин</button>
   </div>
   <div class="loan-grid" id="loan-grid"></div>
+</section>
+
+<section class="rates-section" id="converter">
+  <h2>🔄 Ханш хөрвүүлэгч</h2>
+  <div style="max-width:500px;margin:0 auto">
+    <div style="display:flex;gap:.5rem;margin-bottom:1rem">
+      <input id="conv-amount" type="number" value="1000" min="0" step="any" placeholder="Дүн" style="flex:1;padding:.75rem 1rem;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:1.1rem;font-weight:700;outline:none">
+      <select id="conv-from" style="padding:.75rem 1rem;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:1rem;outline:none;cursor:pointer">
+        <option value="usd">🇺🇸 USD</option>
+        <option value="cny">🇨🇳 CNY</option>
+        <option value="eur">🇪🇺 EUR</option>
+        <option value="rub">🇷🇺 RUB</option>
+        <option value="jpy">🇯🇵 JPY</option>
+        <option value="krw">🇰🇷 KRW</option>
+        <option value="gbp">🇬🇧 GBP</option>
+        <option value="mnt">₮ MNT</option>
+      </select>
+    </div>
+    <button onclick="convert()" style="width:100%;padding:.75rem;border-radius:8px;background:var(--accent);color:#000;font-weight:700;font-size:1rem;cursor:pointer;border:none;margin-bottom:1rem">Хөрвүүлэх →</button>
+    <div id="conv-result" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.5rem">
+      <div id="conv-main" style="font-size:1.8rem;font-weight:800;text-align:center;margin-bottom:1rem"></div>
+      <div id="conv-banks"></div>
+    </div>
+  </div>
 </section>
 
 <section class="code-section" id="docs">
@@ -289,6 +321,95 @@ loadLoans();
 // Auto-refresh every 60s
 setInterval(loadRates, 60000);
 setInterval(loadLoans, 300000);
+
+// ─── Converter ───────────────────────────────────────────────────
+let ratesData = null;
+
+async function convert() {
+  const amount = parseFloat(document.getElementById('conv-amount').value);
+  const from = document.getElementById('conv-from').value;
+  if (!amount || amount <= 0) return;
+
+  if (!ratesData) {
+    try {
+      const res = await fetch('/api/v1/public/rates');
+      if (!res.ok) return;
+      ratesData = await res.json();
+    } catch(e) { return; }
+  }
+
+  const banks = ratesData._banks || [];
+  if (!banks.length) {
+    // Fetch full bank data via auth endpoint workaround
+    const keyRes = await fetch('/api/keys', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tier:'free'})});
+    if (!keyRes.ok) { document.getElementById('conv-result').style.display='block'; document.getElementById('conv-main').textContent='Алдаа'; return; }
+    const keyData = await keyRes.json();
+    const fullRes = await fetch('/api/v1/rates', {headers:{'X-API-Key':keyData.key}});
+    if (!fullRes.ok) return;
+    const fullData = await fullRes.json();
+    ratesData._banks = fullData.banks;
+    return convert();
+  }
+
+  const resultDiv = document.getElementById('conv-result');
+  const mainDiv = document.getElementById('conv-main');
+  const banksDiv = document.getElementById('conv-banks');
+  resultDiv.style.display = 'block';
+
+  const flags = {usd:'🇺🇸',cny:'🇨🇳',eur:'🇪🇺',rub:'🇷🇺',jpy:'🇯🇵',krw:'🇰🇷',gbp:'🇬🇧',mnt:'₮'};
+  const fmt = n => Number(n).toLocaleString('en-US', {maximumFractionDigits:0});
+
+  if (from === 'mnt') {
+    // MNT → all currencies
+    mainDiv.innerHTML = `₮${fmt(amount)} = ?`;
+    let html = '';
+    for (const [cur, info] of Object.entries(ratesData.currencies)) {
+      if (!info.cheapest_sell) continue;
+      const result = amount / info.cheapest_sell.rate;
+      html += `<div class="conv-bank-row cheapest"><span class="bnk">${info.flag} ${cur.toUpperCase()}</span><span class="rt">${result.toFixed(2)}</span></div>`;
+    }
+    banksDiv.innerHTML = html;
+    document.getElementById('conv-savings')?.remove();
+  } else {
+    // Foreign → MNT
+    const curInfo = ratesData.currencies[from];
+    if (!curInfo) return;
+
+    const officialAmt = amount * curInfo.official;
+    mainDiv.innerHTML = `${flags[from]||''} ${fmt(amount)} ${from.toUpperCase()} = <span style="color:var(--accent2)">₮${fmt(officialAmt)}</span>`;
+
+    const bankResults = [];
+    for (const b of banks) {
+      const sell = b.rates[from.toUpperCase()]?.sell;
+      if (!sell) continue;
+      bankResults.push({ name: b.mn, rate: sell, total: amount * sell });
+    }
+    bankResults.sort((a,b) => a.total - b.total);
+
+    let html = '';
+    bankResults.forEach((b, i) => {
+      html += `<div class="conv-bank-row${i===0?' cheapest':''}"><span class="bnk">${b.name}</span><span class="rt">₮${fmt(b.total)} <span style="color:var(--muted);font-weight:400;font-size:.8rem">(₮${fmt(b.rate)})</span></span></div>`;
+    });
+    banksDiv.innerHTML = html;
+
+    // Savings
+    const oldSavings = document.getElementById('conv-savings');
+    if (oldSavings) oldSavings.remove();
+    if (bankResults.length >= 2) {
+      const save = bankResults[bankResults.length-1].total - bankResults[0].total;
+      if (save > 0) {
+        const savingsDiv = document.createElement('div');
+        savingsDiv.id = 'conv-savings';
+        savingsDiv.textContent = `💡 ${bankResults[0].name}-р ${fmt(save)}₮ хэмнэнэ!`;
+        resultDiv.appendChild(savingsDiv);
+      }
+    }
+  }
+}
+
+// Auto-convert on input change
+document.getElementById('conv-amount').addEventListener('input', () => { clearTimeout(window._convTimer); window._convTimer = setTimeout(convert, 400); });
+document.getElementById('conv-from').addEventListener('change', convert);
 </script>
 </body>
 </html>
